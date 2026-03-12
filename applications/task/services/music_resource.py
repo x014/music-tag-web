@@ -56,8 +56,13 @@ class NetEaseMusicClient:
 
     def fetch_id3_by_title(self, title):
         data = send({'s': title, 'type': '1', 'limit': '10', 'offset': '0'}).POST("weapi/cloudsearch/get/web")
+        print(f"网易云音乐搜索响应状态码: {data.status_code}")
         try:
-            songs = data.json().get("result", {}).get("songs", [])
+            json_data = data.json()
+            print(f"网易云音乐搜索响应: {json_data}")
+            if json_data.get("code", 0) != 200:
+                print(f"网易云音乐搜索失败，错误码: {json_data.get('code')}, 错误信息: {json_data.get('message', '未知错误')}")
+            songs = json_data.get("result", {}).get("songs", [])
         except Exception as e:
             print("网易云音乐搜索失败", e, data.text)
             songs = []
@@ -97,7 +102,11 @@ class MiGuMusicClient:
     def fetch_id3_by_title(self, title):
         url = self.BASE_URL + f"migu/remoting/scr_search_tag?rows=10&type=2&keyword={title}&pgc=1"
         res = requests.get(url, headers=self.header)
-        songs = res.json()["musics"]
+        try:
+            songs = res.json().get("musics", [])
+        except Exception as e:
+            print("咪咕音乐搜索失败", e, res.text)
+            songs = []
         for song in songs:
             song["id"] = song['copyrightId']
             song["name"] = song['songName']

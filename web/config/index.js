@@ -16,12 +16,35 @@ module.exports = {
         autoOpenBrowser: true,
         errorOverlay: true,
         notifyOnErrors: true,
+        // proxyTable: {
+        //     '/api': {
+        //         target: 'http://127.0.0.1:8005', // 你要代理的域名和端口号，要加上http
+        //         changeOrigin: true, // 跨域
+        //         pathRewrite: {
+        //             '^/api-proxy': ''
+        //         }
+        //     }
+        // },
         proxyTable: {
-            '/api': {
-                target: 'http://127.0.0.1:8005', // 你要代理的域名和端口号，要加上http
-                changeOrigin: true, // 跨域
+            '/api-proxy': {
+                target: 'http://127.0.0.1:8002',
+                changeOrigin: true,
                 pathRewrite: {
                     '^/api-proxy': ''
+                }
+            },
+            '/api': {
+                target: 'http://127.0.0.1:8002',
+                changeOrigin: true,
+                pathRewrite: {
+                    '^/api': '/api'
+                }
+            },
+            '/rest': {
+                target: 'http://127.0.0.1:8002',
+                changeOrigin: true,
+                pathRewrite: {
+                    '^/rest': '/rest'
                 }
             }
         },

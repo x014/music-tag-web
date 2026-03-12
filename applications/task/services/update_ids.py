@@ -30,11 +30,12 @@ def save_music(f, each, is_raw_thumbnail):
     file_ext = os.path.basename(f.filename).split(".")[-1]
 
     var_dict = MusicIDS(file=f).var_dict()
-    if each.get("title", None):
-        if "${" in each["title"]:
-            f["title"] = ConstantTemplate(each["title"]).resolve_data(var_dict)
+    song_title = each.get("title") or each.get("name")
+    if song_title:
+        if "${" in song_title:
+            f["title"] = ConstantTemplate(song_title).resolve_data(var_dict)
         else:
-            f["title"] = each["title"]
+            f["title"] = song_title
     if each.get("artist", None) is not None:
         if "${" in each["artist"]:
             artist = ConstantTemplate(each["artist"]).resolve_data(var_dict)

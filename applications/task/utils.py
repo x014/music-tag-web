@@ -58,14 +58,42 @@ def match_artist(my_value, u_value):
         return match_score(my_value, u_value)
 
 
+def parse_filename(file_title):
+    """
+    解析文件名，提取歌曲名和艺术家
+    支持格式：
+    - "编号.艺术家-歌曲名" 如 "3065.光良-童话"
+    - "艺术家-歌曲名" 如 "李宗盛-山丘"
+    - "歌曲名" 如 "童话"
+    """
+    title = file_title
+    artist = ""
+    
+    if "." in file_title:
+        parts = file_title.split(".", 1)
+        if len(parts) == 2 and parts[0].isdigit():
+            file_title = parts[1]
+    
+    if "-" in file_title:
+        parts = file_title.split("-", 1)
+        if len(parts) == 2:
+            artist = parts[0].strip()
+            title = parts[1].strip()
+    
+    return title, artist
+
+
 def match_song(resource, song_path, select_mode):
     from applications.task.services.music_resource import MusicResource
 
     file = music_tag.load_file(song_path)
     file_name = song_path.split("/")[-1]
-    file_title = file_name.split('.')[0]
-    title = file["title"].value or file_title
-    artist = file["artist"].value or ""
+    file_title = ".".join(file_name.split('.')[:-1])
+    
+    parsed_title, parsed_artist = parse_filename(file_title)
+    
+    title = file["title"].value or parsed_title
+    artist = file["artist"].value or parsed_artist
     album = file["album"].value or ""
 
     songs = MusicResource(resource).fetch_id3_by_title(title)

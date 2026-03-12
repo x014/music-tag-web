@@ -19,4 +19,6 @@ urlpatterns = [
     re_path(r'^static/(?P<path>.*)$', static.serve,
             {'document_root': settings.STATIC_ROOT}, name='static'),
     re_path(r'^media/(?P<path>.*)$', static.serve, {'document_root': settings.MEDIA_ROOT}),
+    # 兼容前端代码中的 /app/media/ 路径
+    re_path(r'^app/media/(?P<path>.*)$', static.serve, {'document_root': settings.MEDIA_ROOT}),
 ]

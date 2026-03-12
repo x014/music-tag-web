@@ -4,6 +4,7 @@ import copy
 import os
 import time
 
+from django.conf import settings
 from django.utils.decorators import method_decorator
 from django.views.decorators.gzip import gzip_page
 from rest_framework import mixins
@@ -54,6 +55,13 @@ class TaskViewSets(GenericViewSet):
         file_path = validate_data['file_path']
         sorted_fields = validate_data['sorted_fields']
         file_path_list = file_path.split('/')
+        
+        # 路径转换：将 /app/media/ 转换为实际的 MEDIA_ROOT 路径
+        if file_path.startswith('/app/media/'):
+            file_path = file_path.replace('/app/media/', settings.MEDIA_ROOT + os.sep)
+        elif file_path == '/app/media/' or file_path == '/app/media':
+            file_path = settings.MEDIA_ROOT
+        
         try:
             data = os.scandir(file_path)
         except FileNotFoundError:
@@ -135,6 +143,13 @@ class TaskViewSets(GenericViewSet):
         file_type = file_name.split(".")[-1]
         if file_type in ["lrc", "txt"]:
             return self.success_response()
+        
+        # 路径转换：将 /app/media/ 转换为实际的 MEDIA_ROOT 路径
+        if file_path.startswith('/app/media/'):
+            file_path = file_path.replace('/app/media/', settings.MEDIA_ROOT + os.sep)
+        elif file_path == '/app/media/' or file_path == '/app/media':
+            file_path = settings.MEDIA_ROOT
+        
         file_path = file_path.rstrip('/')
         sub_path = file_path.split('/')[-1]
         if sub_path == file_name:
@@ -158,6 +173,13 @@ class TaskViewSets(GenericViewSet):
         """批量更新音乐id3信息"""
         validate_data = self.is_validated_data(request.data)
         full_path = validate_data['file_full_path']
+        
+        # 路径转换：将 /app/media/ 转换为实际的 MEDIA_ROOT 路径
+        if full_path.startswith('/app/media/'):
+            full_path = full_path.replace('/app/media/', settings.MEDIA_ROOT + os.sep)
+        elif full_path == '/app/media/' or full_path == '/app/media':
+            full_path = settings.MEDIA_ROOT
+        
         select_data = validate_data['select_data']
         music_info = validate_data['music_info']
         music_id3_info = []
@@ -189,6 +211,13 @@ class TaskViewSets(GenericViewSet):
     def batch_auto_update_id3(self, request, *args, **kwargs):
         validate_data = self.is_validated_data(request.data)
         full_path = validate_data['file_full_path']
+        
+        # 路径转换：将 /app/media/ 转换为实际的 MEDIA_ROOT 路径
+        if full_path.startswith('/app/media/'):
+            full_path = full_path.replace('/app/media/', settings.MEDIA_ROOT + os.sep)
+        elif full_path == '/app/media/' or full_path == '/app/media':
+            full_path = settings.MEDIA_ROOT
+        
         select_data = validate_data['select_data']
         music_info = validate_data['music_info']
         select_mode = music_info["select_mode"]
@@ -273,6 +302,19 @@ class TaskViewSets(GenericViewSet):
         root_path = validate_data["root_path"]
         first_dir = validate_data["first_dir"]
         full_path = validate_data["file_full_path"]
+        
+        # 路径转换：将 /app/media/ 转换为实际的 MEDIA_ROOT 路径
+        if full_path.startswith('/app/media/'):
+            full_path = full_path.replace('/app/media/', settings.MEDIA_ROOT + os.sep)
+        elif full_path == '/app/media/' or full_path == '/app/media':
+            full_path = settings.MEDIA_ROOT
+        
+        # 路径转换：root_path 也需要转换
+        if root_path.startswith('/app/media/'):
+            root_path = root_path.replace('/app/media/', settings.MEDIA_ROOT + os.sep)
+        elif root_path == '/app/media/' or root_path == '/app/media':
+            root_path = settings.MEDIA_ROOT
+        
         select_data = validate_data["select_data"]
         second_dir = validate_data.get("second_dir", "")
         music_id3_info = []
