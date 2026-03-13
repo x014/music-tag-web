@@ -1,8 +1,10 @@
 import base64
 import copy
 import copy
+import datetime
 import os
 import time
+import uuid
 
 from django.conf import settings
 from django.utils.decorators import method_decorator
@@ -12,10 +14,10 @@ from rest_framework.decorators import action
 
 from applications.task.constants import ALLOW_TYPE
 from applications.task.filters import TaskFilters
-from applications.task.models import TaskRecord, Task
+from applications.task.models import TaskRecord, Task, BatchTask
 from applications.task.serialziers import FileListSerializer, Id3Serializer, UpdateId3Serializer, \
     FetchId3ByTitleSerializer, FetchLlyricSerializer, BatchUpdateId3Serializer, TranslationLycSerializer, \
-    TidyFolderSerializer, TaskSerializer, UploadImageSerializer
+    TidyFolderSerializer, TaskSerializer, UploadImageSerializer, BatchTaskSerializer
 from applications.task.services.music_ids import MusicIDS
 from applications.task.services.music_resource import MusicResource
 from applications.task.services.update_ids import update_music_info
@@ -212,7 +214,6 @@ class TaskViewSets(GenericViewSet):
         validate_data = self.is_validated_data(request.data)
         full_path = validate_data['file_full_path']
         
-        # 路径转换：将 /app/media/ 转换为实际的 MEDIA_ROOT 路径
         if full_path.startswith('/app/media/'):
             full_path = full_path.replace('/app/media/', settings.MEDIA_ROOT + os.sep)
         elif full_path == '/app/media/' or full_path == '/app/media':
@@ -220,9 +221,17 @@ class TaskViewSets(GenericViewSet):
         
         select_data = validate_data['select_data']
         music_info = validate_data['music_info']
-        select_mode = music_info["select_mode"]
+        select_mode = music_info.get("select_mode", "hard")
         source_list = music_info.get("source_list", [])
-        timestamp = str(int(time.time() * 1000))
+        
+        batch_id = str(uuid.uuid4())
+        
+        batch_task = BatchTask.objects.create(
+            batch_id=batch_id,
+            task_type='auto_tag',
+            status='pending'
+        )
+        
         bulk_set = []
         for each in select_data:
             name = each.get("name")
@@ -231,11 +240,16 @@ class TaskViewSets(GenericViewSet):
                 "song_name": song_name,
                 "full_path": f"{full_path}/{name}",
                 "icon": each.get("icon"),
-                "batch": timestamp
+                "batch": batch_id
             }))
         TaskRecord.objects.bulk_create(bulk_set, batch_size=500)
-        batch_auto_tag_task(timestamp, source_list, select_mode)
-        return self.success_response()
+        
+        batch_auto_tag_task.delay(batch_id, source_list, select_mode)
+        
+        return self.success_response(data={
+            "batch_id": batch_id,
+            "message": "任务已创建，正在后台执行"
+        })
 
     @action(methods=['POST'], detail=False)
     def fetch_lyric(self, request, *args, **kwargs):
@@ -303,13 +317,11 @@ class TaskViewSets(GenericViewSet):
         first_dir = validate_data["first_dir"]
         full_path = validate_data["file_full_path"]
         
-        # 路径转换：将 /app/media/ 转换为实际的 MEDIA_ROOT 路径
         if full_path.startswith('/app/media/'):
             full_path = full_path.replace('/app/media/', settings.MEDIA_ROOT + os.sep)
         elif full_path == '/app/media/' or full_path == '/app/media':
             full_path = settings.MEDIA_ROOT
         
-        # 路径转换：root_path 也需要转换
         if root_path.startswith('/app/media/'):
             root_path = root_path.replace('/app/media/', settings.MEDIA_ROOT + os.sep)
         elif root_path == '/app/media/' or root_path == '/app/media':
@@ -330,8 +342,26 @@ class TaskViewSets(GenericViewSet):
                     music_id3_info.append(f"{file_full_path}/{each}")
             else:
                 music_id3_info.append(f"{full_path}/{data.get('name')}")
-        tidy_folder_task(music_id3_info, {"root_path": root_path, "first_dir": first_dir, "second_dir": second_dir})
-        return self.success_response()
+        
+        batch_id = str(uuid.uuid4())
+        
+        BatchTask.objects.create(
+            batch_id=batch_id,
+            task_type='tidy_folder',
+            status='pending',
+            total_count=len(music_id3_info)
+        )
+        
+        tidy_folder_task.delay(batch_id, music_id3_info, {
+            "root_path": root_path, 
+            "first_dir": first_dir, 
+            "second_dir": second_dir
+        })
+        
+        return self.success_response(data={
+            "batch_id": batch_id,
+            "message": "整理任务已创建，正在后台执行"
+        })
 
     @action(methods=['POST'], detail=False)
     def upload_image(self, request, *args, **kwargs):
@@ -376,6 +406,114 @@ class TaskViewSets(GenericViewSet):
     def full_scan_folder(self, request, *args, **kwargs):
         full_scan_folder.delay()
         return self.success_response()
+
+    @action(methods=['GET'], detail=False)
+    def batch_progress(self, request, *args, **kwargs):
+        """查询批量任务进度"""
+        batch_id = request.query_params.get('batch_id')
+        if not batch_id:
+            return self.failure_response(msg="缺少 batch_id 参数")
+        
+        batch_task = BatchTask.objects.filter(batch_id=batch_id).first()
+        if not batch_task:
+            return self.failure_response(msg="任务不存在")
+        
+        return self.success_response(data={
+            "batch_id": batch_task.batch_id,
+            "task_type": batch_task.task_type,
+            "status": batch_task.status,
+            "total_count": batch_task.total_count,
+            "success_count": batch_task.success_count,
+            "failed_count": batch_task.failed_count,
+            "current_index": batch_task.current_index,
+            "progress_percent": batch_task.progress_percent,
+            "progress_text": batch_task.progress_text,
+            "error_message": batch_task.error_message,
+            "created_at": batch_task.created_at,
+            "started_at": batch_task.started_at,
+            "finished_at": batch_task.finished_at,
+        })
+
+    @action(methods=['GET'], detail=False)
+    def batch_list(self, request, *args, **kwargs):
+        """获取批量任务列表"""
+        task_type = request.query_params.get('task_type')
+        status = request.query_params.get('status')
+        
+        queryset = BatchTask.objects.all()
+        if task_type:
+            queryset = queryset.filter(task_type=task_type)
+        if status:
+            queryset = queryset.filter(status=status)
+        
+        queryset = queryset[:20]
+        
+        data = []
+        for batch in queryset:
+            data.append({
+                "batch_id": batch.batch_id,
+                "task_type": batch.task_type,
+                "status": batch.status,
+                "total_count": batch.total_count,
+                "success_count": batch.success_count,
+                "failed_count": batch.failed_count,
+                "progress_percent": batch.progress_percent,
+                "created_at": batch.created_at,
+                "finished_at": batch.finished_at,
+            })
+        
+        return self.success_response(data=data)
+
+    @action(methods=['POST'], detail=False)
+    def batch_cancel(self, request, *args, **kwargs):
+        """取消批量任务"""
+        batch_id = request.data.get('batch_id')
+        if not batch_id:
+            return self.failure_response(msg="缺少 batch_id 参数")
+        
+        batch_task = BatchTask.objects.filter(batch_id=batch_id).first()
+        if not batch_task:
+            return self.failure_response(msg="任务不存在")
+        
+        if batch_task.status in ['completed', 'failed', 'cancelled']:
+            return self.failure_response(msg="任务已结束，无法取消")
+        
+        batch_task.status = 'cancelled'
+        batch_task.finished_at = datetime.datetime.now()
+        batch_task.save()
+        
+        return self.success_response(msg="任务已取消")
+
+    @action(methods=['GET'], detail=False)
+    def batch_records(self, request, *args, **kwargs):
+        """获取批量任务的详细记录"""
+        batch_id = request.query_params.get('batch_id')
+        state = request.query_params.get('state')
+        
+        if not batch_id:
+            return self.failure_response(msg="缺少 batch_id 参数")
+        
+        queryset = TaskRecord.objects.filter(batch=batch_id)
+        if state:
+            queryset = queryset.filter(state=state)
+        
+        queryset = queryset[:100]
+        
+        data = []
+        for record in queryset:
+            data.append({
+                "id": record.id,
+                "song_name": record.song_name,
+                "artist_name": record.artist_name,
+                "full_path": record.full_path,
+                "state": record.state,
+                "match_source": record.match_source,
+                "match_score": record.match_score,
+                "error_message": record.error_message,
+                "process_time": round(record.process_time, 2),
+            })
+        
+        return self.success_response(data=data)
 
 
 class TaskModelViewSets(mixins.ListModelMixin,

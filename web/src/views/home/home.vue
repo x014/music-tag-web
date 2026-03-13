@@ -599,6 +599,44 @@
                 </bk-option>
             </bk-select>
         </bk-dialog>
+        <bk-dialog v-model="progressDialog.visible"
+            theme="primary"
+            :mask-close="false"
+            :show-footer="false"
+            title="任务进度">
+            <div style="padding: 20px;">
+                <div style="margin-bottom: 15px;">
+                    <span>任务类型: </span>
+                    <span v-if="progressDialog.taskType === 'auto_tag'">自动刮削</span>
+                    <span v-else-if="progressDialog.taskType === 'tidy_folder'">整理文件夹</span>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <span>状态: </span>
+                    <bk-tag v-if="progressDialog.status === 'pending'" theme="info">等待中</bk-tag>
+                    <bk-tag v-else-if="progressDialog.status === 'running'" theme="warning">执行中</bk-tag>
+                    <bk-tag v-else-if="progressDialog.status === 'completed'" theme="success">已完成</bk-tag>
+                    <bk-tag v-else-if="progressDialog.status === 'failed'" theme="danger">失败</bk-tag>
+                    <bk-tag v-else-if="progressDialog.status === 'cancelled'" theme="">已取消</bk-tag>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <bk-progress :percent="progressDialog.progressPercent" :show-text="true" theme="primary"></bk-progress>
+                </div>
+                <div style="margin-bottom: 15px; display: flex; justify-content: space-between;">
+                    <span>进度: {{ progressDialog.progressText }}</span>
+                    <span>成功: {{ progressDialog.successCount }} | 失败: {{ progressDialog.failedCount }}</span>
+                </div>
+                <div style="text-align: center; margin-top: 20px;">
+                    <bk-button v-if="progressDialog.status === 'running' || progressDialog.status === 'pending'"
+                        theme="danger"
+                        @click="cancelBatchTask">
+                        取消任务
+                    </bk-button>
+                    <bk-button v-else theme="primary" @click="closeProgressDialog">
+                        关闭
+                    </bk-button>
+                </div>
+            </div>
+        </bk-dialog>
     </div>
 </template>
 <script>
@@ -743,7 +781,20 @@
                         headerPosition: 'left'
                     }
                 },
-                sortedField: localStorage.getItem('sortedField') ? JSON.parse(localStorage.getItem('sortedField')) : []
+                sortedField: localStorage.getItem('sortedField') ? JSON.parse(localStorage.getItem('sortedField')) : [],
+                progressDialog: {
+                    visible: false,
+                    batchId: '',
+                    taskType: '',
+                    status: '',
+                    totalCount: 0,
+                    successCount: 0,
+                    failedCount: 0,
+                    currentIndex: 0,
+                    progressPercent: 0,
+                    progressText: '0/0'
+                },
+                progressTimer: null
             }
         },
         computed: {
@@ -1039,8 +1090,9 @@
                                 this.isLoading = false
                                 console.log(res)
                                 if (res.result) {
-                                    this.$cwMessage('创建成功', 'success')
+                                    this.$cwMessage('任务已创建，正在后台执行', 'success')
                                     this.$store.commit('setHasMsg', true)
+                                    this.startProgressPolling(res.data.batch_id, 'auto_tag')
                                 }
                             })
                             return true
@@ -1064,7 +1116,8 @@
                                 this.isLoading = false
                                 console.log(res)
                                 if (res.result) {
-                                    this.$cwMessage('创建成功', 'success')
+                                    this.$cwMessage('整理任务已创建，正在后台执行', 'success')
+                                    this.startProgressPolling(res.data.batch_id, 'tidy_folder')
                                     this.handleSearchFile()
                                 } else {
                                     this.$cwMessage('创建失败', 'error')
@@ -1108,6 +1161,79 @@
                 } else {
                     return false
                 }
+            },
+            startProgressPolling(batchId, taskType) {
+                this.progressDialog = {
+                    visible: true,
+                    batchId: batchId,
+                    taskType: taskType,
+                    status: 'pending',
+                    totalCount: 0,
+                    successCount: 0,
+                    failedCount: 0,
+                    currentIndex: 0,
+                    progressPercent: 0,
+                    progressText: '0/0'
+                }
+                this.pollProgress()
+            },
+            pollProgress() {
+                if (this.progressTimer) {
+                    clearTimeout(this.progressTimer)
+                }
+                this.$api.Task.batchProgress({batch_id: this.progressDialog.batchId}).then((res) => {
+                    if (res.result) {
+                        const data = res.data
+                        this.progressDialog.status = data.status
+                        this.progressDialog.totalCount = data.total_count
+                        this.progressDialog.successCount = data.success_count
+                        this.progressDialog.failedCount = data.failed_count
+                        this.progressDialog.currentIndex = data.current_index
+                        this.progressDialog.progressPercent = data.progress_percent
+                        this.progressDialog.progressText = data.progress_text
+                        
+                        if (data.status === 'running' || data.status === 'pending') {
+                            this.progressTimer = setTimeout(() => {
+                                this.pollProgress()
+                            }, 2000)
+                        } else if (data.status === 'completed') {
+                            this.$cwMessage(`任务完成！成功: ${data.success_count}, 失败: ${data.failed_count}`, 'success')
+                        } else if (data.status === 'failed') {
+                            this.$cwMessage(`任务失败: ${data.error_message}`, 'error')
+                        } else if (data.status === 'cancelled') {
+                            this.$cwMessage('任务已取消', 'warning')
+                        }
+                    }
+                })
+            },
+            cancelBatchTask() {
+                this.$bkInfo({
+                    title: '确认要取消任务？',
+                    confirmLoading: true,
+                    confirmFn: () => {
+                        this.$api.Task.batchCancel({batch_id: this.progressDialog.batchId}).then((res) => {
+                            if (res.result) {
+                                this.$cwMessage('任务已取消', 'success')
+                                this.progressDialog.visible = false
+                                if (this.progressTimer) {
+                                    clearTimeout(this.progressTimer)
+                                }
+                            }
+                        })
+                        return true
+                    }
+                })
+            },
+            closeProgressDialog() {
+                if (this.progressTimer) {
+                    clearTimeout(this.progressTimer)
+                }
+                this.progressDialog.visible = false
+            }
+        },
+        beforeDestroy() {
+            if (this.progressTimer) {
+                clearTimeout(this.progressTimer)
             }
         }
     }

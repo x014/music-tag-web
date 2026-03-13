@@ -39,5 +39,17 @@ export default {
     },
     getRecord: function(params) {
         return GET(reUrl + '/api/record/', params)
+    },
+    batchProgress: function(params) {
+        return GET(reUrl + '/api/batch_progress/', params)
+    },
+    batchList: function(params) {
+        return GET(reUrl + '/api/batch_list/', params)
+    },
+    batchCancel: function(params) {
+        return POST(reUrl + '/api/batch_cancel/', params)
+    },
+    batchRecords: function(params) {
+        return GET(reUrl + '/api/batch_records/', params)
     }
 }

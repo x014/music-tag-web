@@ -2,7 +2,7 @@ import os.path
 
 from rest_framework import serializers
 
-from applications.task.models import TaskRecord, Task
+from applications.task.models import TaskRecord, Task, BatchTask
 
 
 class FileListSerializer(serializers.Serializer):
@@ -86,6 +86,15 @@ class TaskSerializer(serializers.ModelSerializer):
             Task.objects.filter(id=ret["id"]).delete()
             ret["is_exists"] = False
         return ret
+
+
+class BatchTaskSerializer(serializers.ModelSerializer):
+    progress_percent = serializers.ReadOnlyField()
+    progress_text = serializers.ReadOnlyField()
+    
+    class Meta:
+        model = BatchTask
+        fields = "__all__"
 
 
 class UploadImageSerializer(serializers.Serializer):
