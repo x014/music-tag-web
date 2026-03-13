@@ -5,12 +5,18 @@ from __future__ import absolute_import, unicode_literals
 import os
 import time
 from celery import Celery, platforms
-from django.conf import settings
 
 platforms.C_FORCE_ROOT = True
 
-# set the default Django settings module for the 'celery' program.
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "django_vue_cli.settings")
+
+if os.getenv("dockerrun", "no") == "yes":
+    from component.mysql_pool import patch_mysql
+    from gevent import monkey
+    monkey.patch_all(thread=False)
+    patch_mysql()
+
+from django.conf import settings
 
 app = Celery("django_vue_cli")
 

@@ -1,4 +1,5 @@
 Django==2.2.6
+setuptools<82.0.0
 celery==4.4.7
 django-celery-beat==2.2.0
 django-celery-results==1.2.1
@@ -22,3 +23,4 @@ PyExecJS==1.5.1
 tqdm==4.65.0
 lxml==4.9.1
 pathos==0.3.1
+Cython==3.0.0

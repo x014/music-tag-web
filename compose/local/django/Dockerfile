@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install --no-install-recommends -y \
 COPY ./requirements .
 # Create Python Dependency and Sub-Dependency Wheels.
 RUN pip wheel --wheel-dir /usr/src/app/wheels  \
-  -r ${BUILD_ENVIRONMENT}.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+  -r ${BUILD_ENVIRONMENT}.txt
 
 # Python 'run' stage
 FROM python as python-run-stage
