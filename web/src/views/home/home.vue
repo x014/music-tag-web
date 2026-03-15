@@ -821,6 +821,11 @@
         created() {
             this.handleSearchFile()
         },
+        beforeDestroy() {
+            if (this.progressTimer) {
+                clearTimeout(this.progressTimer)
+            }
+        },
         methods: {
             tpl(node, ctx) {
                 // 如果在某些情况下 h 不能自动注入而报错，需将 h 参数写上；一般来说 h 默认是第一参数，但是现在改为第一参数会导致已经使用的用户都需要修改，所以先放在最后。
@@ -1191,7 +1196,7 @@
                         this.progressDialog.currentIndex = data.current_index
                         this.progressDialog.progressPercent = data.progress_percent
                         this.progressDialog.progressText = data.progress_text
-                        
+
                         if (data.status === 'running' || data.status === 'pending') {
                             this.progressTimer = setTimeout(() => {
                                 this.pollProgress()
@@ -1229,11 +1234,6 @@
                     clearTimeout(this.progressTimer)
                 }
                 this.progressDialog.visible = false
-            }
-        },
-        beforeDestroy() {
-            if (this.progressTimer) {
-                clearTimeout(this.progressTimer)
             }
         }
     }
