@@ -4,7 +4,7 @@ import os
 from mutagen.flac import VCFLACDict
 from mutagen.id3 import ID3
 
-from applications.task.utils import detect_language
+from applications.task.utils import detect_language, parse_filename
 from component import music_tag
 
 
@@ -177,6 +177,8 @@ class MusicIDS:
                 return ""
 
     def to_dict(self):
+        file_title = os.path.splitext(self.file_name)[0]
+        parsed_title, _ = parse_filename(file_title)
         return {
             "year": self.year,
             "comment": self.comment,
@@ -190,7 +192,7 @@ class MusicIDS:
             "artwork_w": self.artwork_w,
             "artwork_h": self.artwork_h,
             "artwork_size": self.artwork_size,
-            "title": self.title or self.file_name.split(".")[0],
+            "title": self.title or parsed_title,
             "artist": self.artist,
             "album": self.album,
             "album_type": self.album_type,
@@ -201,8 +203,10 @@ class MusicIDS:
         }
 
     def var_dict(self):
+        file_title = os.path.splitext(self.file_name)[0]
+        parsed_title, _ = parse_filename(file_title)
         return {
-            "title": self.title or self.file_name.split(".")[0],
+            "title": self.title or parsed_title,
             "artist": self.artist,
             "albumartist": self.album_artist,
             "discnumber": self.disc_number,
